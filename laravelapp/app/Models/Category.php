@@ -11,5 +11,6 @@ class Category extends Model
 
     protected array $fillable = [
         "name",
+        "deleted"
     ];
 }
