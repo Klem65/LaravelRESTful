@@ -10,7 +10,7 @@ class ProductCategory extends Model
 {
     use HasFactory;
 
-    protected array $fillable = [
+    protected $fillable = [
         "product_id",
         "category_id",
     ];
