@@ -7,6 +7,7 @@ docker-compose up -d
 ### Установить зависимости 
 
 cd laravelapp
+
 composer install
 
 ###Выполнить миграции и наполнение бд:
