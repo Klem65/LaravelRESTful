@@ -2,37 +2,48 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Category;
-use App\Models\ProductCategory;
+use App\Models\CategoryHelper;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class CategoryController extends Controller
 {
-    public function createCategory(Request $request)
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     * @throws ValidationException
+     */
+    public function createCategory(Request $request): JsonResponse
     {
-        $params = $request->post();
-        $category = new Category();
+        $validator = Validator::make($request->all(), [
+            'name' => 'string|max:255'
+        ]);
 
-        foreach ($params as $key => $param) {
-            $category->{$key} = $param;
+        if ($validator->fails()) {
+            return response()->json(['errors'=>$validator->errors()]);
         }
-        $category->save();
+        $validateParams = $validator->validate();
 
-        return response('Category create', 200);
+        CategoryHelper::createCategory($validateParams);
+
+        return new JsonResponse('Category create', 200);
     }
 
-    public function deleteCategory($id)
+    /**
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function deleteCategory(int $id): JsonResponse
     {
-        $category = Category::query()->where('id', '=', $id)->first();
+        $result = CategoryHelper::deleteCategory($id);
 
-        $listProductCategories = ProductCategory::query()->where('category_id', '=', $category->id);
-
-        if ($listProductCategories->count() === 0) {
-            return response('Category not deleted. Category have product', 405);
+        if (!$result['status']) {
+            return new JsonResponse($result['message'], 405);
         }
 
-        $category->deleted = 1;
-        $category->save();
-        return response('Category deleted', 200);
+        return new JsonResponse('Category deleted', 200);
     }
 }

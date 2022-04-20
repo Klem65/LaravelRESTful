@@ -2,91 +2,121 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Category;
-use App\Models\Product;
-use App\Models\ProductCategory;
+use App\Models\ProductHelper;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
-    public function getProducts(Request $request)
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     * @throws ValidationException
+     */
+    public function getProducts(Request $request): JsonResponse
     {
-        $params = $request->all();
+        $validator = Validator::make($request->all(), [
+            'name' => 'string|max:255',
+            'priceStart' => 'integer',
+            'priceEnd' => 'integer',
+            'published' => 'boolean',
+            'deleted' => 'boolean',
+            'categoryName' => 'string'
+        ]);
 
-        $productQuery = Product::query();
+        if ($validator->fails()) {
+            return response()->json(['errors'=>$validator->errors()]);
+        }
+        $validateParams = $validator->validate();
 
-        foreach ($params as $key => $param) {
-            if ($key === 'priceStart' || $key === 'priceEnd') {
-                $operator = ($key === 'priceStart') ? '>=' : '<=';
-                $productQuery->where('price', $operator, $param);
-                continue;
-            } else if ($key === 'categoryName') {
-                $category = Category::all()->where('name', '=', $param)->first();
-                $listProductCategories = ProductCategory::query()->where('category_id', '=', $category->id);
-                $productIds = $listProductCategories->pluck('product_id');
-                $productQuery->whereIn('id', $productIds);
-                continue;
-            }
+        return new JsonResponse(ProductHelper::getProduct($validateParams));
+    }
 
-            $productQuery->where($key, '=', $param);
+    /**
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function getProductById(int $id): JsonResponse
+    {
+        $result = ProductHelper::getProductById($id);
+
+        if (!$result['status']) {
+            return new JsonResponse('Product with ID: ' . $id . ' not found', 405);
         }
 
-        return $productQuery->get();
+        return new JsonResponse($result['data']);
     }
 
-    public function getProductById($id)
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     * @throws ValidationException
+     */
+    public function createProduct(Request $request): JsonResponse
     {
-        return Product::query()->where('id', '=', $id)->first();
-    }
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'price' => 'required|regex:/^\d+(\.\d{1,2})?$/',
+            'published' => 'required|boolean',
+            'deleted' => 'required|boolean',
+            'categories' => 'required|string'
+        ]);
 
-    public function createProduct(Request $request)
-    {
-        $params = $request->post();
+        if ($validator->fails()) {
+            return response()->json(['errors'=>$validator->errors()]);
+        }
+        $validateParams = $validator->validate();
 
-        $product = new Product();
-        foreach ($params as $key => $param) {
-
-            if ($key === 'categories') {
-                $categories = explode(',', $params['categories']);
-                if (count($categories) >= 2 and count($categories) <= 10) {
-                    foreach ($categories as $category) {
-                        $productCategory = new ProductCategory();
-                        $productCategory->product_id = $product->id;
-                        $productCategory->category_id = $category;
-                        $productCategory->save();
-                    }
-                } else {
-                    return response('A product can have from 2 to 10 categories', 405);
-                }
-            }
-
-            $product->{$key} = $param;
+        $categories = explode(',', $validateParams['categories']);
+        if (!(count($categories) >= 2) || !(count($categories) <= 10)) {
+            return new JsonResponse('A product can have from 2 to 10 categories', 405);
         }
 
-        $product->save();
+        ProductHelper::createProduct($validateParams, $categories);
 
-        return response('Product create', 200);
+        return new JsonResponse('Product create', 200);
     }
 
-    public function updateProduct(Request $request, $id)
+    /**
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     * @throws ValidationException
+     */
+    public function updateProduct(Request $request, int $id): JsonResponse
     {
-        $params = $request->all();
+        $validator = Validator::make($request->all(), [
+            'name' => 'string|max:255',
+            'price' => 'regex:/^\d+(\.\d{1,2})?$/',
+            'published' => 'boolean',
+            'deleted' => 'boolean',
+            'categories' => 'string'
+        ]);
 
-        $product = Product::query()->where('id', '=', $id)->first();
-        foreach ($params as $key => $param) {
-            $product->{$key} = $param;
+        if ($validator->fails()) {
+            return response()->json(['errors'=>$validator->errors()]);
+        }
+        $validateParams = $validator->validate();
+
+       if (!ProductHelper::updateProduct($validateParams, $id)) {
+           return new JsonResponse('Product with ID: ' . $id . ' not found', 405);
+       }
+
+        return new JsonResponse('Product update', 200);
+    }
+
+    /**
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function deleteProduct(int $id): JsonResponse
+    {
+        if (!ProductHelper::deleteProduct($id)) {
+            return new JsonResponse('Product with ID: ' . $id . ' not found', 405);
         }
 
-        $product->save();
-
-        return response('Product update', 200);
-    }
-
-    public function deleteProduct($id)
-    {
-        $product = Product::query()->where('id', '=', $id)->first();
-        $product->deleted = 1;
-        $product->save();
-        return response('Product deleted', 200);
+        return new JsonResponse('Product deleted', 200);
     }
 }
